@@ -20,13 +20,19 @@ def create_database():
             customer_id INTEGER,
             amount REAL,
             risk_level TEXT,
-            created_at TEXT
+            created_at TEXT,
+            reason TEXT
         )
     """)
 
     # Add timestamp to existing database
     try:
         cur.execute("ALTER TABLE transactions ADD COLUMN created_at TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cur.execute("ALTER TABLE transactions ADD COLUMN reason TEXT")
     except sqlite3.OperationalError:
         pass
 

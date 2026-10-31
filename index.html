@@ -97,16 +97,17 @@ document.getElementById("transactionForm").onsubmit = async function(e) {
     let result = await response.json();
 
     document.getElementById("result").innerText =
-        result.risk_level || result.message;
+    "Risk: " + result.risk_level + " | Reason: " + result.reason;
 
     loadTransactions();
 };
 
 async function loadTransactions() {
+
     let response = await fetch("/transactions");
     let data = await response.json();
 
-    let output = "<table border='1'><tr><th>ID</th><th>Customer</th><th>Amount</th><th>Risk</th></tr>";
+    let output = "<table border='1'><tr><th>ID</th><th>Customer</th><th>Amount</th><th>Risk</th><th>Reason</th></tr>";
 
     data.forEach(function(t) {
         output += `<tr>
@@ -114,6 +115,7 @@ async function loadTransactions() {
             <td>${t.name}</td>
             <td>${t.amount}</td>
             <td>${t.risk}</td>
+            <td>${t.reason}</td>
         </tr>`;
     });
 

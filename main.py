@@ -1,22 +1,23 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
-from fraud_detection import get_base_amount, get_daily_limit, detect_fraud
 import sqlite3
+from datetime import datetime, timedelta
 
 from db import create_database
-from fraud_detection import get_base_amount, detect_fraud
+from fraud_detection import get_base_amount, get_daily_limit, detect_fraud
 
 app = FastAPI()
 
 create_database()
 
 
+# Database connection
 def connect():
     return sqlite3.connect("fraudalert.db")
 
 
+# Open website
 @app.get("/")
 def home():
     return FileResponse("index.html")
@@ -27,6 +28,7 @@ def css():
     return FileResponse("style.css")
 
 
+# Input models
 class Customer(BaseModel):
     name: str
     category: str
@@ -46,10 +48,10 @@ def add_customer(data: Customer):
 
     base = get_base_amount(data.category)
 
-    cur.execute(
-        "INSERT INTO customers (name, account_type, base_amount) VALUES (?, ?, ?)",
-        (data.name, data.category, base)
-    )
+    cur.execute("""
+        INSERT INTO customers (name, account_type, base_amount)
+        VALUES (?, ?, ?)
+    """, (data.name, data.category, base))
 
     conn.commit()
     conn.close()
@@ -57,7 +59,7 @@ def add_customer(data: Customer):
     return {"message": "Customer registered successfully"}
 
 
-# Get ALL customers
+# Get customers
 @app.get("/customers")
 def get_customers():
 
@@ -69,15 +71,17 @@ def get_customers():
 
     conn.close()
 
-    return [{"id": c[0], "name": c[1]} for c in data]
+    return [
+        {"id": c[0], "name": c[1]}
+        for c in data
+    ]
 
 
 # Check transaction
 @app.post("/transaction")
-@app.post("/transaction")
 def check_transaction(data: Transaction):
 
-    conn = sqlite3.connect("fraudalert.db")
+    conn = connect()
     cur = conn.cursor()
 
     cur.execute(
@@ -95,10 +99,14 @@ def check_transaction(data: Transaction):
     category = customer[1]
 
     now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    five_minutes = (now - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Daily transaction total
+    today = now.strftime("%Y-%m-%d")
+
+    five_minutes = (
+        now - timedelta(minutes=5)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Calculate daily transaction amount
     cur.execute("""
         SELECT SUM(amount) FROM transactions
         WHERE customer_id=? AND date(created_at)=?
@@ -106,7 +114,7 @@ def check_transaction(data: Transaction):
 
     daily_total = cur.fetchone()[0] or 0
 
-    # Transactions in last 5 minutes
+    # Count recent transactions
     cur.execute("""
         SELECT COUNT(*) FROM transactions
         WHERE customer_id=? AND created_at>=?
@@ -116,18 +124,35 @@ def check_transaction(data: Transaction):
 
     limit = get_daily_limit(category)
 
-    risk = detect_fraud(data.amount, base, daily_total, limit, count)
+    # Detect risk and reason
+    risk, reason = detect_fraud(
+        data.amount,
+        base,
+        daily_total,
+        limit,
+        count
+    )
 
+    # Save transaction
     cur.execute("""
         INSERT INTO transactions
-        (customer_id, amount, risk_level, created_at)
-        VALUES (?, ?, ?, ?)
-    """, (data.customer_id, data.amount, risk, now.strftime("%Y-%m-%d %H:%M:%S")))
+        (customer_id, amount, risk_level, reason, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        data.customer_id,
+        data.amount,
+        risk,
+        reason,
+        now.strftime("%Y-%m-%d %H:%M:%S")
+    ))
 
     conn.commit()
     conn.close()
 
-    return {"risk_level": risk}
+    return {
+        "risk_level": risk,
+        "reason": reason
+    }
 
 
 # Transaction history
@@ -139,8 +164,8 @@ def get_transactions():
 
     cur.execute("""
         SELECT transactions.id, customers.name,
-        transactions.amount, transactions.transaction_type,
-        transactions.risk_level, transactions.status
+        transactions.amount, transactions.risk_level,
+        transactions.reason
         FROM transactions
         JOIN customers
         ON transactions.customer_id = customers.id
@@ -148,6 +173,7 @@ def get_transactions():
     """)
 
     data = cur.fetchall()
+
     conn.close()
 
     return [
@@ -155,9 +181,8 @@ def get_transactions():
             "id": t[0],
             "name": t[1],
             "amount": t[2],
-            "type": t[3],
-            "risk": t[4],
-            "status": t[5]
+            "risk": t[3],
+            "reason": t[4]
         }
         for t in data
     ]
