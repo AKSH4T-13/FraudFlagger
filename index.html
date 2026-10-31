@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FraudAlert</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+<h1>FraudAlert</h1>
+<p>Transaction Monitoring System</p>
+
+<h2>Register Customer</h2>
+
+<form id="customerForm">
+    <input id="name" placeholder="Customer Name" required>
+
+    <select id="category">
+        <option>Student</option>
+        <option>Working Professional</option>
+        <option>Business</option>
+        <option>Corporate</option>
+    </select>
+
+    <button type="submit">Register</button>
+</form>
+
+<p id="customerMsg"></p>
+
+<h2>Check Transaction</h2>
+
+<form id="transactionForm">
+    <select id="customerId" required></select>
+    <input id="amount" type="number" placeholder="Amount" min="1" required>
+    <button type="submit">Check Risk</button>
+</form>
+
+<p id="result"></p>
+
+<h2>Transaction History</h2>
+
+<button onclick="loadTransactions()">View Transactions</button>
+<div id="history"></div>
+
+<script>
+
+async function loadCustomers() {
+    let response = await fetch("/customers");
+    let data = await response.json();
+
+    let dropdown = document.getElementById("customerId");
+    dropdown.innerHTML = "";
+
+    data.forEach(function(c) {
+        let option = document.createElement("option");
+        option.value = c.id;
+        option.text = c.name + " (ID: " + c.id + ")";
+        dropdown.add(option);
+    });
+}
+
+document.getElementById("customerForm").onsubmit = async function(e) {
+    e.preventDefault();
+
+    let data = {
+        name: document.getElementById("name").value,
+        category: document.getElementById("category").value
+    };
+
+    let response = await fetch("/customer", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data)
+    });
+
+    let result = await response.json();
+    document.getElementById("customerMsg").innerText = result.message;
+
+    this.reset();
+    loadCustomers();
+};
+
+document.getElementById("transactionForm").onsubmit = async function(e) {
+    e.preventDefault();
+
+    let data = {
+        customer_id: Number(document.getElementById("customerId").value),
+        amount: Number(document.getElementById("amount").value)
+    };
+
+    let response = await fetch("/transaction", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data)
+    });
+
+    let result = await response.json();
+
+    document.getElementById("result").innerText =
+        result.risk_level || result.message;
+
+    loadTransactions();
+};
+
+async function loadTransactions() {
+    let response = await fetch("/transactions");
+    let data = await response.json();
+
+    let output = "<table border='1'><tr><th>ID</th><th>Customer</th><th>Amount</th><th>Risk</th></tr>";
+
+    data.forEach(function(t) {
+        output += `<tr>
+            <td>${t.id}</td>
+            <td>${t.name}</td>
+            <td>${t.amount}</td>
+            <td>${t.risk}</td>
+        </tr>`;
+    });
+
+    output += "</table>";
+    document.getElementById("history").innerHTML = output;
+}
+
+loadCustomers();
+
+</script>
+
+</body>
+</html>
